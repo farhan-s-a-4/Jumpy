@@ -14,6 +14,7 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = pygame.time.Clock()
 pygame.display.set_caption("Jumpy")
 
+# Load images
 bg_img = pygame.image.load("bg.png").convert()
 pipe_img = pygame.image.load("pipe.png").convert_alpha()
 bird_img = pygame.image.load("python.png").convert_alpha()
@@ -40,6 +41,9 @@ pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE, 1200)
 
+# Track scored pipes
+scored_pipes = []
+
 def create_pipe():
     random_pipe_pos = random.randint(200, 400)
     bottom_pipe = pipe_img.get_rect(midtop=(SCREEN_WIDTH + 50, random_pipe_pos))
@@ -49,6 +53,7 @@ def create_pipe():
 def move_pipes(pipes):
     for p in pipes:
         p.centerx -= PIPE_SPEED
+    # Keep only pipes still visible
     return [p for p in pipes if p.right > 0]
 
 def draw_pipes(pipes):
@@ -77,6 +82,15 @@ def show_text(text, size, y):
     rect = render.get_rect(center=(SCREEN_WIDTH//2, y))
     screen.blit(render, rect)
 
+def update_score(pipes, bird_rect, score):
+    for p in pipes:
+        # Only count bottom pipes and once per pipe
+        if p.bottom >= SCREEN_HEIGHT and p not in scored_pipes:
+            if p.centerx < bird_rect.centerx:
+                score += 1
+                scored_pipes.append(p)
+    return score
+
 # Game variables
 game_active = True
 score = 0
@@ -97,6 +111,7 @@ while True:
                     # Restart game
                     game_active = True
                     pipe_list.clear()
+                    scored_pipes.clear()
                     bird_rect.center = (100, SCREEN_HEIGHT // 2)
                     bird_movement = 0
                     score = 0
@@ -113,7 +128,7 @@ while True:
     screen.blit(bg_img, (bg_x + SCREEN_WIDTH, 0))
 
     if game_active:
-        # Bird
+        # Bird physics
         bird_movement += gravity
         bird_rect.centery += bird_movement
         rotated_bird = rotate_bird(bird_img)
@@ -126,10 +141,8 @@ while True:
         # Collision
         game_active = check_collision(pipe_list)
 
-        # Score update
-        for p in pipe_list:
-            if p.centerx == bird_rect.centerx:
-                score += 0.5  # each pipe pair counts once
+        # Score
+        score = update_score(pipe_list, bird_rect, score)
         show_text(f"Score: {int(score)}", 32, 50)
 
     else:
