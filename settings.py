@@ -24,7 +24,7 @@ BIRD_IMAGE = "Jumpy.png"
 
 # Sounds
 JUMP_SOUND = "jump.wav"
-HIT_SOUND = "hit.mp3"
-BGM = "bgm.mp3"
+HIT_SOUND = "hit.ogg"
+BGM = "bgm.ogg"
 
 FONT_NAME = "arial"
