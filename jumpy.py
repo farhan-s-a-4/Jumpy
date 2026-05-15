@@ -56,21 +56,26 @@ async def game_loop(screen, clock, high_score):
     go_selected = 0
 
     def reset_game():
-        nonlocal bird_rect, bird_movement, pipe_list, scored_pipes, score, game_active, high_score, last_pipe_spawn, bgm_paused, go_selected
-        high_score = max(score, high_score)
-        save_high_score(high_score)
-        bird_rect = bird_img.get_rect(center=(100, SCREEN_HEIGHT // 2))
-        bird_movement = 0
-        pipe_list.clear()
-        scored_pipes.clear()
-        score = 0
-        game_active = True
-        go_selected = 0
-        last_pipe_spawn = pygame.time.get_ticks()
-        
-        # Restart BGM from the beginning
-        pygame.mixer.music.play(-1)
-        bgm_paused = False
+            nonlocal bird_rect, bird_movement, pipe_list, scored_pipes, score, game_active, high_score, last_pipe_spawn, bgm_paused, go_selected
+            high_score = max(score, high_score)
+            save_high_score(high_score)
+            bird_rect = bird_img.get_rect(center=(100, SCREEN_HEIGHT // 2))
+            bird_movement = 0
+            pipe_list.clear()
+            scored_pipes.clear()
+            score = 0
+            game_active = True
+            go_selected = 0
+            last_pipe_spawn = pygame.time.get_ticks()
+            
+            # --- NEW AUDIO RESET LOGIC ---
+            # Stop all playing sound effects (like the hit sound)
+            pygame.mixer.stop()
+            
+            # Stop the background music completely, then restart it from the beginning
+            pygame.mixer.music.stop()
+            pygame.mixer.music.play(-1)
+            bgm_paused = False
 
     def create_pipe():
         random_pipe_pos = random.randint(200, 400)
