@@ -7,7 +7,11 @@ from settings import *
 from utils import draw_text, save_high_score
 
 async def game_loop(screen, clock, high_score):
-    
+    bg_scroll_speed = BG_SCROLL_SPEED * PHYSICS_FPS
+    gravity = GRAVITY * PHYSICS_FPS * PHYSICS_FPS
+    jump_strength = JUMP_STRENGTH * PHYSICS_FPS
+    pipe_speed = PIPE_SPEED * PHYSICS_FPS
+
     def load_img(name, size, fallback_color):
         path = os.path.join(IMAGES_DIR, name)
         if os.path.exists(path):
@@ -29,7 +33,7 @@ async def game_loop(screen, clock, high_score):
             jump_sound = pygame.mixer.Sound(os.path.join(SOUNDS_DIR, JUMP_SOUND))
         if os.path.exists(os.path.join(SOUNDS_DIR, HIT_SOUND)):
             hit_sound = pygame.mixer.Sound(os.path.join(SOUNDS_DIR, HIT_SOUND))
-        
+
         bgm_path = os.path.join(SOUNDS_DIR, BGM)
         if os.path.exists(bgm_path):
             pygame.mixer.music.load(bgm_path)
@@ -38,55 +42,68 @@ async def game_loop(screen, clock, high_score):
         print("Audio load warning:", e)
 
     last_pipe_spawn = pygame.time.get_ticks()
-    
+
     # Audio pause tracking
     bgm_paused = False
     game_over_time = 0
 
     bird_rect = bird_img.get_rect(center=(100, SCREEN_HEIGHT // 2))
+    bird_y = float(bird_rect.centery)
     bird_movement = 0
     pipe_list = []
+    pipe_x_positions = {}
     scored_pipes = []
     score = 0
     game_active = True
     bg_x = 0
-    
+
     # Game Over Menu state
     go_options = ["Restart", "Main Menu"]
     go_selected = 0
 
     def reset_game():
-            nonlocal bird_rect, bird_movement, pipe_list, scored_pipes, score, game_active, high_score, last_pipe_spawn, bgm_paused, go_selected
-            high_score = max(score, high_score)
-            save_high_score(high_score)
-            bird_rect = bird_img.get_rect(center=(100, SCREEN_HEIGHT // 2))
-            bird_movement = 0
-            pipe_list.clear()
-            scored_pipes.clear()
-            score = 0
-            game_active = True
-            go_selected = 0
-            last_pipe_spawn = pygame.time.get_ticks()
-            
-            # --- NEW AUDIO RESET LOGIC ---
-            # Stop all playing sound effects (like the hit sound)
-            pygame.mixer.stop()
-            
-            # Stop the background music completely, then restart it from the beginning
-            pygame.mixer.music.stop()
-            pygame.mixer.music.play(-1)
-            bgm_paused = False
+        nonlocal bird_rect, bird_y, bird_movement, pipe_list, pipe_x_positions, scored_pipes, score, game_active, high_score, last_pipe_spawn, bgm_paused, go_selected
+        high_score = max(score, high_score)
+        save_high_score(high_score)
+        bird_rect = bird_img.get_rect(center=(100, SCREEN_HEIGHT // 2))
+        bird_y = float(bird_rect.centery)
+        bird_movement = 0
+        pipe_list.clear()
+        pipe_x_positions.clear()
+        scored_pipes.clear()
+        score = 0
+        game_active = True
+        go_selected = 0
+        last_pipe_spawn = pygame.time.get_ticks()
+
+        # --- NEW AUDIO RESET LOGIC ---
+        # Stop all playing sound effects (like the hit sound)
+        pygame.mixer.stop()
+
+        # Stop the background music completely, then restart it from the beginning
+        pygame.mixer.music.stop()
+        pygame.mixer.music.play(-1)
+        bgm_paused = False
 
     def create_pipe():
         random_pipe_pos = random.randint(200, 400)
         bottom_pipe = pipe_img.get_rect(midtop=(SCREEN_WIDTH + 50, random_pipe_pos))
         top_pipe = pipe_img.get_rect(midbottom=(SCREEN_WIDTH + 50, random_pipe_pos - PIPE_GAP))
+        pipe_x_positions[id(bottom_pipe)] = float(bottom_pipe.centerx)
+        pipe_x_positions[id(top_pipe)] = float(top_pipe.centerx)
         return bottom_pipe, top_pipe
 
-    def move_pipes(pipes):
+    def move_pipes(pipes, dt):
+        remaining_pipes = []
         for p in pipes:
-            p.centerx -= PIPE_SPEED
-        return [p for p in pipes if p.right > 0]
+            x = pipe_x_positions.get(id(p), float(p.centerx)) - pipe_speed * dt
+            pipe_x_positions[id(p)] = x
+            p.centerx = round(x)
+            if p.right > 0:
+                remaining_pipes.append(p)
+            else:
+                pipe_x_positions.pop(id(p), None)
+        return remaining_pipes
 
     def draw_pipes(pipes):
         for p in pipes:
@@ -106,7 +123,8 @@ async def game_loop(screen, clock, high_score):
         return True
 
     def rotate_bird(bird):
-        rot = max(-90, min(bird_movement * -3, 30))
+        frame_velocity = bird_movement / PHYSICS_FPS
+        rot = max(-90, min(frame_velocity * -3, 30))
         return pygame.transform.rotate(bird, rot)
 
     def update_score(pipes, bird_rect, score):
@@ -119,14 +137,15 @@ async def game_loop(screen, clock, high_score):
 
     def perform_jump():
         nonlocal bird_movement
-        bird_movement = JUMP_STRENGTH
+        bird_movement = jump_strength
         if jump_sound: jump_sound.play()
 
     while True:
+        dt = min(clock.tick(FPS) / 1000, MAX_FRAME_TIME)
         current_time = pygame.time.get_ticks()
         mouse_pos = pygame.mouse.get_pos()
         mouse_clicked = False
-        
+
         was_active = game_active
 
         for event in pygame.event.get():
@@ -146,7 +165,7 @@ async def game_loop(screen, clock, high_score):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE and game_active:
                     perform_jump()
-                
+
                 # Game Over Menu Keyboard Navigation
                 elif not game_active:
                     if event.key == pygame.K_UP:
@@ -160,28 +179,29 @@ async def game_loop(screen, clock, high_score):
             pipe_list.extend(create_pipe())
             last_pipe_spawn = current_time
 
-        bg_x -= BG_SCROLL_SPEED
+        bg_x -= bg_scroll_speed * dt
         if bg_x <= -SCREEN_WIDTH:
             bg_x = 0
 
-        screen.blit(bg_img, (bg_x, 0))
-        screen.blit(bg_img, (bg_x + SCREEN_WIDTH, 0))
+        screen.blit(bg_img, (int(bg_x), 0))
+        screen.blit(bg_img, (int(bg_x + SCREEN_WIDTH), 0))
 
         if game_active:
-            bird_movement += GRAVITY
-            bird_rect.centery += bird_movement
-            
+            bird_movement += gravity * dt
+            bird_y += bird_movement * dt
+            bird_rect.centery = round(bird_y)
+
             rotated_bird = rotate_bird(bird_img)
             rotated_rect = rotated_bird.get_rect(center=bird_rect.center)
             screen.blit(rotated_bird, rotated_rect)
 
-            pipe_list = move_pipes(pipe_list)
+            pipe_list = move_pipes(pipe_list, dt)
             draw_pipes(pipe_list)
 
             game_active = check_collision(pipe_list)
-            
+
             # --- DEATH LOGIC TRIGGERS HERE ---
-            if not game_active and was_active: 
+            if not game_active and was_active:
                 if hit_sound: hit_sound.play()
                 pygame.mixer.music.pause()
                 bgm_paused = True
@@ -190,12 +210,12 @@ async def game_loop(screen, clock, high_score):
             score = update_score(pipe_list, bird_rect, score)
             if score > high_score:
                 high_score = score
-                
+
             draw_text(screen, f"Score: {int(score)}  High: {int(high_score)}", 32, 40)
 
         else:
             # --- GAME OVER STATE ---
-            
+
             # Resume BGM after 1.5 seconds (4600 ms)
             if bgm_paused and current_time - game_over_time >= 4600:
                 pygame.mixer.music.unpause()
@@ -203,13 +223,13 @@ async def game_loop(screen, clock, high_score):
 
             draw_text(screen, "Game Over", 50, SCREEN_HEIGHT//2 - 80)
             draw_text(screen, f"Score: {int(score)}  High: {int(high_score)}", 30, SCREEN_HEIGHT//2 - 30)
-            
+
             # Draw interactive Game Over Menu
             for i, opt in enumerate(go_options):
                 color = (255, 255, 0) if i == go_selected else (255, 255, 255)
                 prefix = "> " if i == go_selected else "  "
                 rect = draw_text(screen, prefix + opt, 30, SCREEN_HEIGHT//2 + 30 + i * 40, color=color)
-                
+
                 # Check for hover/touch
                 if rect.collidepoint(mouse_pos):
                     go_selected = i
@@ -222,5 +242,4 @@ async def game_loop(screen, clock, high_score):
                             return  # Exits the game_loop, dropping you back to main.py's menu
 
         pygame.display.update()
-        clock.tick(FPS)
         await asyncio.sleep(0)

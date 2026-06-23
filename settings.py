@@ -3,6 +3,8 @@ import os
 SCREEN_WIDTH = 400
 SCREEN_HEIGHT = 600
 FPS = 120
+PHYSICS_FPS = 120
+MAX_FRAME_TIME = 1 / 30
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
